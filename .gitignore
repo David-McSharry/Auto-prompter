@@ -1,2 +1,7 @@
 venv
 .venv
+# Dependencies
+/frontend/node_modules
+/frontend/.pnp
+/frontend/.pnp.js
+node_modules

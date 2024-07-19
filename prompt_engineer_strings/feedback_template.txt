@@ -1,0 +1,11 @@
+The % of questions answered correctly was {{eval_accuracy_percentage}}%
+
+The % of answers that did not end with an interger answer was {{invalid_answer_percentage}}%. 
+
+Here are some questions the LLM got wrong:
+
+=======
+{{wrongly_answered_questions_str}}
+=====
+
+Try again, note the ways in which the example wrong questions were answered wrongly and note how your new prompt will address these issues.
