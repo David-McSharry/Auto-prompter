@@ -2,28 +2,6 @@ from openai import OpenAI
 
 client = OpenAI()
 
-# response = client.chat.completions.create(
-#   model="gpt-4o",
-#   messages=[
-#     {
-#       "role": "user",
-#       "content": [
-#         {
-#           "type": "text",
-#           "text": "hi\n"
-#         }
-#       ]
-#     }
-#   ],
-#   temperature=1,
-#   max_tokens=256,
-#   top_p=1,
-#   frequency_penalty=0,
-#   presence_penalty=0
-# )
-
-
-
 
 class PromptEngineer:
     """
@@ -34,7 +12,7 @@ class PromptEngineer:
 
     This can probably eventually be adapted to automated red teaming
     """
-    def __init__(self, benchmark="logicqa"):
+    def __init__(self, prompt_number, benchmark="logicqa"):
 
         self.benchmark = benchmark
 
@@ -46,6 +24,7 @@ class PromptEngineer:
                 benchmark_description = file.read()
 
             system_prompt = benchmark_description_template.replace('{{benchmark_description}}', benchmark_description)
+            system_prompt = system_prompt.replace('{{prompt_number}}', str(prompt_number))
 
             self.messages=[
                 {"role": "system", "content": system_prompt},
@@ -105,10 +84,9 @@ class PromptEngineer:
 
         import json
 
-        print(json.dumps(self.messages, indent=4))
 
         prompt_engineer_response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=self.messages,
             temperature=1,
             max_tokens=512,
@@ -116,7 +94,6 @@ class PromptEngineer:
             frequency_penalty=0,
             presence_penalty=0
         )
-
 
         self.add_prompt_engineer_response(prompt_engineer_response.choices[0].message.content)
 

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Engineer WebSocket Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .message {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+    <div class="container mx-auto p-4 flex-grow flex flex-col">
+        <h1 class="text-3xl font-bold mb-4">Prompt Engineer Interface</h1>
+        <button id="startButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-4">
+            Start Main Loop
+        </button>
+        <div id="status" class="mb-4 text-lg font-semibold"></div>
+        
+        <div class="flex flex-row flex-grow">
+            <div class="w-1/2 pr-2 overflow-y-auto">
+                <h2 class="text-xl font-bold mb-2">Conversation:</h2>
+                <div id="conversation" class="space-y-4"></div>
+            </div>
+            <div class="w-1/2 pl-2 flex flex-col">
+                <div class="mb-4 bg-white p-4 rounded-lg shadow">
+                    <h2 class="text-xl font-bold mb-2">Score Over Time:</h2>
+                    <canvas id="scoreChart"></canvas>
+                </div>
+                <div id="details" class="bg-white p-4 rounded-lg shadow flex-grow">
+                    <h2 class="text-xl font-bold mb-2">Message Details:</h2>
+                    <p id="detailsContent" class="text-gray-500">Select a user message to view details</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8000/ws');
+        const startButton = document.getElementById('startButton');
+        const statusDiv = document.getElementById('status');
+        const conversationDiv = document.getElementById('conversation');
+        const detailsContent = document.getElementById('detailsContent');
+
+        let chart;
+        const chartData = {
+            labels: [],
+            datasets: [{
+                label: 'Score',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        };
+
+        function initChart() {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(score) {
+            chartData.labels.push(`Prompt ${chartData.labels.length + 1}`);
+            chartData.datasets[0].data.push(score);
+            chart.update();
+        }
+
+        function createMessageElement(message) {
+            const div = document.createElement('div');
+            div.className = `p-4 rounded-lg ${message.role === 'assistant' ? 'bg-blue-100' : 'bg-gray-100'}`;
+            
+            const roleSpan = document.createElement('span');
+            roleSpan.className = 'font-bold';
+            roleSpan.textContent = message.role.charAt(0).toUpperCase() + message.role.slice(1);
+            
+            const content = document.createElement('p');
+            content.className = 'message mt-2';
+            content.textContent = message.content;
+            
+            div.appendChild(roleSpan);
+            div.appendChild(content);
+
+            if (message.role === 'user' && 'score' in message) {
+                const button = document.createElement('button');
+                button.className = 'mt-2 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors duration-200';
+                button.textContent = 'View Details';
+                button.onclick = () => showDetails(message);
+                div.appendChild(button);
+
+                updateChart(message.score);
+            }
+
+            return div;
+        }
+
+        function showDetails(message) {
+            let detailsHtml = `<p><strong>Score:</strong> ${message.score}</p>`;
+            
+            detailsHtml += '<h3 class="font-bold text-green-600 mt-4 mb-2">Correctly Answered Questions:</h3>';
+            detailsHtml += '<ul class="list-disc pl-5">';
+            message.correctly_answered_qs.forEach(q => {
+                detailsHtml += `<li class="mb-1">${q}</li>`;
+            });
+            detailsHtml += '</ul>';
+
+            detailsHtml += '<h3 class="font-bold text-red-600 mt-4 mb-2">Wrongly Answered Questions:</h3>';
+            detailsHtml += '<ul class="list-disc pl-5">';
+            message.wrongly_answered_qs.forEach(q => {
+                detailsHtml += `<li class="mb-1">${q}</li>`;
+            });
+            detailsHtml += '</ul>';
+
+            detailsContent.innerHTML = detailsHtml;
+        }
+
+        socket.onopen = function(e) {
+            console.log("[open] Connection established");
+            statusDiv.textContent = "Connected to server";
+        };
+
+        socket.onmessage = function(event) {
+            console.log(`[message] Data received from server: ${event.data}`);
+            if (event.data === "main_loop_complete") {
+                statusDiv.textContent = "Main loop completed";
+                startButton.disabled = false;
+            } else {
+                try {
+                    const stateData = JSON.parse(event.data);
+                    conversationDiv.innerHTML = '';
+                    stateData.forEach(message => {
+                        conversationDiv.appendChild(createMessageElement(message));
+                    });
+                } catch (e) {
+                    console.error("Error parsing JSON:", e);
+                }
+            }
+        };
+
+        socket.onclose = function(event) {
+            if (event.wasClean) {
+                console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+            } else {
+                console.log('[close] Connection died');
+            }
+            statusDiv.textContent = "Disconnected from server";
+        };
+
+        socket.onerror = function(error) {
+            console.log(`[error] ${error.message}`);
+            statusDiv.textContent = "Error: " + error.message;
+        };
+
+        startButton.onclick = function() {
+            socket.send("start_main_loop");
+            statusDiv.textContent = "Main loop started";
+            startButton.disabled = true;
+        };
+
+        initChart();
+    </script>
+</body>
+</html>

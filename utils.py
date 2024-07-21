@@ -49,71 +49,72 @@ def format_logic_qa_2(qa_dict: dict) -> tuple[str, str]:
     
     return question.strip(), correct_answer
 
+# NOTE: only use async version now
 
-def test_prompt_on_benchmark(
-    prompt: str,
-    dataset: dict,
-    num_samples: int
-    ) -> tuple[float, list[str], list[str]]:
+# def test_prompt_on_benchmark(
+#     prompt: str,
+#     dataset: dict,
+#     num_samples: int
+#     ) -> tuple[float, list[str], list[str]]:
     
-    """
-    This function takes in a prompt and the logicQA benchmark
-    and returns the score the prompt gets, and the right and wrong answers
+#     """
+#     This function takes in a prompt and the logicQA benchmark
+#     and returns the score the prompt gets, and the right and wrong answers
 
-    TODO: make it so that this takes advantage of top_n eventually maybe.
-    """
+#     TODO: make it so that this takes advantage of top_n eventually maybe.
+#     """
 
-    correct_answered_questions = []
-    wrong_answered_questions = []
-    invalid_answer_count = 0
+#     correct_answered_questions = []
+#     wrong_answered_questions = []
+#     invalid_answer_count = 0
 
-    len_benchmark = len(dataset)
+#     len_benchmark = len(dataset)
 
-    random_indices = np.random.choice(len_benchmark, num_samples, replace=False)
+#     random_indices = np.random.choice(len_benchmark, num_samples, replace=False)
 
-    for index in random_indices:
+#     for index in random_indices:
 
-        qa_dict = dataset[int(index)]
+#         qa_dict = dataset[int(index)]
 
-        Q, A = format_logic_qa(qa_dict)
-        A = str(A)
+#         Q, A = format_logic_qa(qa_dict)
+#         A = str(A)
 
-        full_prompt = prompt + "\n\n" + Q
+#         full_prompt = prompt + "\n\n" + Q
 
-        LLM_response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "user", "content": full_prompt}
-            ],
-            temperature=1,
-            max_tokens=512,
-            top_p=1,
-            frequency_penalty=0,
-            presence_penalty=0
-        )
+#         LLM_response = client.chat.completions.create(
+#             model="gpt-4o",
+#             messages=[
+#                 {"role": "user", "content": full_prompt}
+#             ],
+#             temperature=1,
+#             max_tokens=512,
+#             top_p=1,
+#             frequency_penalty=0,
+#             presence_penalty=0
+#         )
 
-        full_LLM_response = LLM_response.choices[0].message.content
+#         full_LLM_response = LLM_response.choices[0].message.content
 
-        LLM_A_int = full_LLM_response[-1] # this is actually a string of an int
+#         LLM_A_int = full_LLM_response[-1] # this is actually a string of an int
 
-        assert type(LLM_A_int) == type(A), f"Answer type mismatch, LLM: {type(LLM_A_int)}, Benchmark: {type(A)}"
+#         assert type(LLM_A_int) == type(A), f"Answer type mismatch, LLM: {type(LLM_A_int)}, Benchmark: {type(A)}"
 
-        Q_and_LLM_A = 'QUESTION:\n' + Q + "\n\nLLM ANSWER:\n" + full_LLM_response + "\n\nCORRECT ANSWER:\n" + A + "\n"
+#         Q_and_LLM_A = 'QUESTION:\n' + Q + "\n\nLLM ANSWER:\n" + full_LLM_response + "\n\nCORRECT ANSWER:\n" + A + "\n"
 
-        print(f"LLM answer: >{LLM_A_int}<, correct answer: >{A}<")
+#         print(f"LLM answer: >{LLM_A_int}<, correct answer: >{A}<")
 
-        if LLM_A_int == A:
-            correct_answered_questions.append(Q_and_LLM_A)
-        else:
-            wrong_answered_questions.append(Q_and_LLM_A)
-        if LLM_A_int not in ['0', '1', '2', '3']:
-            invalid_answer_count += 1
+#         if LLM_A_int == A:
+#             correct_answered_questions.append(Q_and_LLM_A)
+#         else:
+#             wrong_answered_questions.append(Q_and_LLM_A)
+#         if LLM_A_int not in ['0', '1', '2', '3']:
+#             invalid_answer_count += 1
         
-    score = len(correct_answered_questions) / num_samples
+#     score = len(correct_answered_questions) / num_samples
 
-    invalid_answer_decimals = invalid_answer_count / num_samples
+#     invalid_answer_decimals = invalid_answer_count / num_samples
 
-    return score, correct_answered_questions, wrong_answered_questions, invalid_answer_decimals
+#     return score, correct_answered_questions, wrong_answered_questions, invalid_answer_decimals
 
 
 def make_PE_feedback(
@@ -177,7 +178,6 @@ async def test_prompt_on_benchmark_async(
 
         # other steps should be the same regardless of dataset type
         # unless the dataset does not act like a list with quesitons and answers I guess
-        print(qa_dict)
         if dataset_type == "logicqa":
             Q, A = format_logic_qa(qa_dict)
         elif dataset_type == "logicqa2.0":
@@ -191,7 +191,7 @@ async def test_prompt_on_benchmark_async(
 
         async with AsyncOpenAI() as client:
             LLM_response = await client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "user", "content": full_prompt}
                 ],

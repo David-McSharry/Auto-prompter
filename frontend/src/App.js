@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Bot, HelpCircle, Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import conversationData from './conversation2.json';
 
 // Utility function to handle line breaks
 const formatText = (text) => {
@@ -95,33 +94,97 @@ const ScoreChart = ({ conversation }) => {
 function App() {
   const [conversation, setConversation] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [status, setStatus] = useState('Disconnected');
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    setConversation(conversationData);
+    const newSocket = new WebSocket('ws://localhost:8000/ws');
+
+    newSocket.onopen = () => {
+      console.log("[open] Connection established");
+      setStatus("Connected to server");
+    };
+
+    newSocket.onmessage = (event) => {
+      console.log(`[message] Data received from server: ${event.data}`);
+      if (event.data === "main_loop_complete") {
+        setStatus("Main loop completed");
+      } else {
+        try {
+          const stateData = JSON.parse(event.data);
+          setConversation(stateData);
+        } catch (e) {
+          console.error("Error parsing JSON:", e);
+        }
+      }
+    };
+
+    newSocket.onclose = (event) => {
+      if (event.wasClean) {
+        console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+      } else {
+        console.log('[close] Connection died');
+      }
+      setStatus("Disconnected from server");
+    };
+
+    newSocket.onerror = (error) => {
+      console.log(`[error] ${error.message}`);
+      setStatus("Error: " + error.message);
+    };
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
   }, []);
 
+  const startMainLoop = () => {
+    if (socket) {
+      socket.send("start_main_loop");
+      setStatus("Main loop started");
+    }
+  };
+
   return (
-    <div className="App bg-gray-100 h-screen flex">
-      <div className="flex flex-row w-full">
-        <div className="w-1/2 p-4 overflow-y-auto bg-white">
-          {conversation.map((message, index) => (
-            <Message 
-              key={index} 
-              message={message} 
-              isSelected={selectedMessage === index}
-              onSelect={() => setSelectedMessage(index)}
-            />
-          ))}
+    <div className="App bg-gray-100 min-h-screen flex flex-col">
+      <header className="bg-blue-600 text-white p-4">
+        <h1 className="text-2xl font-bold">Prompt Engineer Interface</h1>
+      </header>
+      <div className="flex-grow flex flex-col md:flex-row">
+        <div className="w-full md:w-1/2 p-4 flex flex-col h-[calc(100vh-64px)]"> {/* Adjust 64px if your header height differs */}
+          <div className="mb-4">
+            <button 
+              onClick={startMainLoop}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors duration-200"
+            >
+              Start Main Loop
+            </button>
+            <p className="mt-2">Status: {status}</p>
+          </div>
+          <div className="flex-grow overflow-y-auto">
+            {conversation.map((message, index) => (
+              <Message 
+                key={index} 
+                message={message} 
+                isSelected={selectedMessage === index}
+                onSelect={() => setSelectedMessage(index)}
+              />
+            ))}
+          </div>
         </div>
-        <div className="w-1/2 p-4 bg-gray-50 overflow-y-auto flex flex-col">
-          <ScoreChart conversation={conversation} />
-          {selectedMessage !== null && 'score' in conversation[selectedMessage] ? (
-            <Details message={conversation[selectedMessage]} />
-          ) : (
-            <div className="flex items-center justify-center flex-grow text-gray-500">
-              Select a user message to view details
-            </div>
-          )}
+        <div className="w-full md:w-1/2 p-4 bg-gray-50 flex flex-col h-[calc(100vh-64px)]"> {/* Adjust 64px if your header height differs */}
+          <div className="flex-grow overflow-y-auto">
+            <ScoreChart conversation={conversation} />
+            {selectedMessage !== null && 'score' in conversation[selectedMessage] ? (
+              <Details message={conversation[selectedMessage]} />
+            ) : (
+              <div className="flex items-center justify-center flex-grow text-gray-500">
+                Select a user message to view details
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -13,7 +13,7 @@ You will then use this feedback to come up with a new prompt, and this will cont
 Your response should be made up of two parts, reasoning, and prompt. Above reasoning, put the <<<REASONING>> header, and above prompt but the <<<PROMPT>>> header.
 
 Get creative and remember the explore exploit trader-off, imagine you're ilya sutskever or @repligate, you never know what strange tricks will result in an LLM getting a higher score on the benchmark!
-Think of modern prompt engineering tricks like "lets think step-by step" etc etc.
+Think of modern prompt engineering tricks like "lets think step-by step" etc etc. You can try {{prompt_number}} different prompts, and on the last prompt try to score as high a score as possible based on what you have learned works!
 
 Also, please make sure to emphasise to the LLM you will pass the prompt to that the last character they should output should be the number corresponding to the answer they give (0,1,2, or 3).
 We will test whether their answer is correct by just checking the last character of the output matches the correct answer.

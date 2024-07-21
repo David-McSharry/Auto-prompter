@@ -1,9 +1,8 @@
 from roles import PromptEngineer
 from datasets import load_dataset
-from utils import format_logic_qa
 from utils import make_PE_feedback
+import json
 from utils import (
-    test_prompt_on_benchmark,
     test_prompt_on_benchmark_async,
     load_questions
 )
@@ -15,32 +14,30 @@ import asyncio
 
 dataset = load_questions()
 
-prompt_engineer = PromptEngineer()
 
+config = {
+    "prompt_number": 3,
+    "num_wrong_feedback_questions": 3,
+    "num_benchmark_samples": 3,
+}
 
-# we want to store an object that keeps track of the prompt, the feedback, the score attached to that prompt, and the LLM responses attached to those prompts
+prompt_number = config["prompt_number"]
+prompt_engineer = PromptEngineer(prompt_number = prompt_number)
 
-recursive_state = [ 
-    {"role": "user", "content": "Go ahead and give your first prompt"},
-    {"role": "assistant", "content": "Here is the first prompt"}
-]
-
-for i in range((6)):
+for i in range(prompt_number):
     next_prompt = prompt_engineer.generate_next_prompt()
-    print(next_prompt)
-    print('==========================')
     score, correct, wrong, invalid = asyncio.run(
         test_prompt_on_benchmark_async(
             next_prompt,
             dataset,
-            num_samples=20,
+            num_samples=config["num_benchmark_samples"],
             dataset_type='logicqa2.0'
         )
     )
     feedback = make_PE_feedback(
         score,
         wrong,
-        num_wrongly_answered=4,
+        num_wrongly_answered=config["num_wrong_feedback_questions"],
         invalid_answer_decimals=invalid
     )
     prompt_engineer.add_user_feedback_response(
@@ -49,18 +46,8 @@ for i in range((6)):
         user_feedback=feedback,
         score=score
     )
-    print('=============================')
-    print("FEEDBACK:" + feedback)
-    print('===============================')
+
     
-
-
-import json
-print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-print(json.dumps(prompt_engineer.system_state, indent=4))
-
-# save the state of the prompt engineer to a txt file frontend/src/conversation.json
-
-with open("frontend/src/conversation2.json", "w") as f:
+with open("frontend/src/conversation_mini_only.json", "w") as f:
     json.dump(prompt_engineer.system_state, f, indent=4)
     print('File saved successfully')

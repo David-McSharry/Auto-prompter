@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Engineer WebSocket Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #stateDisplay {
+            white-space: pre-wrap;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Prompt Engineer Interface</h1>
+    <button id="startButton">Start Main Loop</button>
+    <div id="status"></div>
+    <h2>System State:</h2>
+    <pre id="stateDisplay"></pre>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8000/ws');
+        const startButton = document.getElementById('startButton');
+        const statusDiv = document.getElementById('status');
+        const stateDisplay = document.getElementById('stateDisplay');
+
+        socket.onopen = function(e) {
+            console.log("[open] Connection established");
+            statusDiv.textContent = "Connected to server";
+        };
+
+        socket.onmessage = function(event) {
+            console.log(`[message] Data received from server: ${event.data}`);
+            if (event.data === "main_loop_complete") {
+                statusDiv.textContent = "Main loop completed";
+                startButton.disabled = false;
+            } else {
+                try {
+                    const stateData = JSON.parse(event.data);
+                    stateDisplay.textContent = JSON.stringify(stateData, null, 2);
+                } catch (e) {
+                    console.error("Error parsing JSON:", e);
+                }
+            }
+        };
+
+        socket.onclose = function(event) {
+            if (event.wasClean) {
+                console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+            } else {
+                console.log('[close] Connection died');
+            }
+            statusDiv.textContent = "Disconnected from server";
+        };
+
+        socket.onerror = function(error) {
+            console.log(`[error] ${error.message}`);
+            statusDiv.textContent = "Error: " + error.message;
+        };
+
+        startButton.onclick = function() {
+            socket.send("start_main_loop");
+            statusDiv.textContent = "Main loop started";
+            startButton.disabled = true;
+        };
+    </script>
+</body>
+</html>
