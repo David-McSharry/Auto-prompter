@@ -1,7 +1,5 @@
 The % of questions answered correctly was {{eval_accuracy_percentage}}%
 
-The % of answers that did not end with an interger answer was {{invalid_answer_percentage}}%. 
-
 Here are some questions the LLM got wrong:
 
 =======

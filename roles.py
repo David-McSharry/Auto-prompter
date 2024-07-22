@@ -12,35 +12,47 @@ class PromptEngineer:
 
     This can probably eventually be adapted to automated red teaming
     """
-    def __init__(self, prompt_number, benchmark="logicqa"):
+    def __init__(
+        self,
+        prompt_number : int,
+        parent_model : str,
+        benchmark_name : str,
+        system_prompt_template : str | None = None
+    ):
 
-        self.benchmark = benchmark
+        self.benchmark_name = benchmark_name
+        self.parent_model = parent_model
 
-        with open('prompt_engineer_strings/PE_system_prompt_template.txt', 'r') as file:
-            benchmark_description_template = file.read()
-
-        if benchmark == "logicqa":
+        if system_prompt_template is None:
+            with open('prompt_engineer_strings/PE_system_prompt_template.txt', 'r') as file:
+                system_prompt_template = file.read()
+        if benchmark_name == "logicqa2.0":
             with open('prompt_engineer_strings/logic_QA_description.txt', 'r') as file:
                 benchmark_description = file.read()
-
-            system_prompt = benchmark_description_template.replace('{{benchmark_description}}', benchmark_description)
-            system_prompt = system_prompt.replace('{{prompt_number}}', str(prompt_number))
-
-            self.messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Go ahead and give your first prompt"}
-            ]
-            
-            # this var tracks the state of the conversation between
-            # PE and user but also the score for a given prompt and the LLM responses
-            self.system_state = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Go ahead and give your first prompt"}
-            ]
-
         else:
             # TODO: add more benchmarks eventually
             raise ValueError("Invalid benchmark")
+
+        assert type(system_prompt_template) == str, "System prompt template must be a string"
+        assert '{{benchmark_description}}' in system_prompt_template, "System prompt template must contain '{{benchmark_description}}'"
+        assert '{{prompt_number}}' in system_prompt_template, "System prompt template must contain '{{prompt_number}}'"
+        system_prompt = system_prompt_template.replace('{{benchmark_description}}', benchmark_description)
+        system_prompt = system_prompt.replace('{{prompt_number}}', str(prompt_number))
+        assert '{{benchmark_name}}' not in system_prompt, "failed to replace benchmark name in system prompt"
+        assert '{{system_prompt_template}}' not in system_prompt, "failed to replace system prompt template in system prompt"
+
+        self.messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Go ahead and give your first prompt"}
+        ]
+        
+        # this var tracks the state of the conversation between
+        # PE and user but also the score for a given prompt and the LLM responses
+        self.system_state = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Go ahead and give your first prompt"}
+        ]
+
     
     def add_prompt_engineer_response(self, response: str):
         self.messages.append({"role": "assistant", "content": response})
@@ -86,7 +98,7 @@ class PromptEngineer:
 
 
         prompt_engineer_response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=self.parent_model,
             messages=self.messages,
             temperature=1,
             max_tokens=512,

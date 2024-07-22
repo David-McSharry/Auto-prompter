@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bot, HelpCircle, Info } from 'lucide-react';
+import { User, Bot, HelpCircle, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // Utility function to handle line breaks
@@ -96,6 +96,18 @@ function App() {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [status, setStatus] = useState('Disconnected');
   const [socket, setSocket] = useState(null);
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [benchmarkName, setBenchmarkName] = useState('logicqa2.0');
+  const [config, setConfig] = useState({
+    prompt_number: 1,
+    num_wrong_feedback_questions: 1,
+    num_benchmark_samples: 1,
+  });
+  const [isConfigCollapsed, setIsConfigCollapsed] = useState(false);
+  const [teacherModel, setTeacherModel] = useState('gpt-4o-mini');
+  const [studentModel, setStudentModel] = useState('gpt-4o-mini');
+
+
 
   useEffect(() => {
     const newSocket = new WebSocket('ws://localhost:8000/ws');
@@ -142,19 +154,106 @@ function App() {
 
   const startMainLoop = () => {
     if (socket) {
-      socket.send("start_main_loop");
+      const message = JSON.stringify({
+        action: "start_main_loop",
+        config: config,
+        system_prompt_template: systemPrompt,
+        benchmark_name: benchmarkName,
+        teacher_model: teacherModel,
+        student_model: studentModel
+      });
+      socket.send(message);
       setStatus("Main loop started");
     }
   };
-
+  
+  const handleConfigChange = (e) => {
+    const { name, value } = e.target;
+    setConfig(prevConfig => ({
+      ...prevConfig,
+      [name]: parseInt(value, 10)
+    }));
+  };
+  
   return (
     <div className="App bg-gray-100 min-h-screen flex flex-col">
       <header className="bg-blue-600 text-white p-4">
         <h1 className="text-2xl font-bold">Prompt Engineer Interface</h1>
       </header>
       <div className="flex-grow flex flex-col md:flex-row">
-        <div className="w-full md:w-1/2 p-4 flex flex-col h-[calc(100vh-64px)]"> {/* Adjust 64px if your header height differs */}
-          <div className="mb-4">
+        <div className="w-full md:w-1/2 p-4 flex flex-col h-[calc(100vh-64px)]">
+          <div className="mb-4 space-y-4">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-xl font-bold">Configuration</h2>
+              <button 
+                onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
+                className="text-blue-500 hover:text-blue-700"
+              >
+                {isConfigCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+              </button>
+            </div>
+            {!isConfigCollapsed && (
+              <>
+                <div>
+                  <label className="block mb-2 font-bold">System Prompt Template:</label>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    className="w-full p-2 border rounded"
+                    rows="10"
+                    placeholder="Enter your system prompt template here..."
+                  />
+                </div>
+                <div>
+                  <label className="block mb-2 font-bold">Benchmark Name:</label>
+                  <select
+                    value={benchmarkName}
+                    onChange={(e) => setBenchmarkName(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="logicqa2.0">LogicQA 2.0</option>
+                    <option value="other_benchmark">Other Benchmark</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-2 font-bold">Teacher Model:</label>
+                  <select
+                    value={teacherModel}
+                    onChange={(e) => setTeacherModel(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="gpt-4o">gpt-4o</option>
+                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-2 font-bold">Student Model:</label>
+                  <select
+                    value={studentModel}
+                    onChange={(e) => setStudentModel(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="gpt-4o">gpt-4o</option>
+                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {Object.entries(config).map(([key, value]) => (
+                    <div key={key}>
+                      <label className="block mb-2 font-bold">{key.replace(/_/g, ' ')}:</label>
+                      <input
+                        type="number"
+                        name={key}
+                        value={value}
+                        onChange={handleConfigChange}
+                        className="w-full p-2 border rounded"
+                        min="1"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <button 
               onClick={startMainLoop}
               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors duration-200"
@@ -174,7 +273,7 @@ function App() {
             ))}
           </div>
         </div>
-        <div className="w-full md:w-1/2 p-4 bg-gray-50 flex flex-col h-[calc(100vh-64px)]"> {/* Adjust 64px if your header height differs */}
+        <div className="w-full md:w-1/2 p-4 bg-gray-50 flex flex-col h-[calc(100vh-64px)]">
           <div className="flex-grow overflow-y-auto">
             <ScoreChart conversation={conversation} />
             {selectedMessage !== null && 'score' in conversation[selectedMessage] ? (

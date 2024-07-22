@@ -7,7 +7,7 @@ import json
 
 np.random.seed(42)
 
-client = OpenAI()
+client = AsyncOpenAI()
 
 def load_questions():
     questions = []
@@ -49,79 +49,12 @@ def format_logic_qa_2(qa_dict: dict) -> tuple[str, str]:
     
     return question.strip(), correct_answer
 
-# NOTE: only use async version now
-
-# def test_prompt_on_benchmark(
-#     prompt: str,
-#     dataset: dict,
-#     num_samples: int
-#     ) -> tuple[float, list[str], list[str]]:
-    
-#     """
-#     This function takes in a prompt and the logicQA benchmark
-#     and returns the score the prompt gets, and the right and wrong answers
-
-#     TODO: make it so that this takes advantage of top_n eventually maybe.
-#     """
-
-#     correct_answered_questions = []
-#     wrong_answered_questions = []
-#     invalid_answer_count = 0
-
-#     len_benchmark = len(dataset)
-
-#     random_indices = np.random.choice(len_benchmark, num_samples, replace=False)
-
-#     for index in random_indices:
-
-#         qa_dict = dataset[int(index)]
-
-#         Q, A = format_logic_qa(qa_dict)
-#         A = str(A)
-
-#         full_prompt = prompt + "\n\n" + Q
-
-#         LLM_response = client.chat.completions.create(
-#             model="gpt-4o",
-#             messages=[
-#                 {"role": "user", "content": full_prompt}
-#             ],
-#             temperature=1,
-#             max_tokens=512,
-#             top_p=1,
-#             frequency_penalty=0,
-#             presence_penalty=0
-#         )
-
-#         full_LLM_response = LLM_response.choices[0].message.content
-
-#         LLM_A_int = full_LLM_response[-1] # this is actually a string of an int
-
-#         assert type(LLM_A_int) == type(A), f"Answer type mismatch, LLM: {type(LLM_A_int)}, Benchmark: {type(A)}"
-
-#         Q_and_LLM_A = 'QUESTION:\n' + Q + "\n\nLLM ANSWER:\n" + full_LLM_response + "\n\nCORRECT ANSWER:\n" + A + "\n"
-
-#         print(f"LLM answer: >{LLM_A_int}<, correct answer: >{A}<")
-
-#         if LLM_A_int == A:
-#             correct_answered_questions.append(Q_and_LLM_A)
-#         else:
-#             wrong_answered_questions.append(Q_and_LLM_A)
-#         if LLM_A_int not in ['0', '1', '2', '3']:
-#             invalid_answer_count += 1
-        
-#     score = len(correct_answered_questions) / num_samples
-
-#     invalid_answer_decimals = invalid_answer_count / num_samples
-
-#     return score, correct_answered_questions, wrong_answered_questions, invalid_answer_decimals
-
 
 def make_PE_feedback(
     score: float,
     wrongly_answered_questions: list[str],
     num_wrongly_answered: int,
-    invalid_answer_decimals: float
+    invalid_answer_decimals: float  # no longer being used because we use LLM answer extraction
     ) -> str:
     """
     Score is the percentage of questions answered correctly
@@ -147,7 +80,6 @@ def make_PE_feedback(
         feedback = f.read()
 
     feedback = feedback.replace("{{eval_accuracy_percentage}}", str(score * 100))
-    feedback = feedback.replace("{{invalid_answer_percentage}}", str(invalid_answer_decimals * 100))
     feedback = feedback.replace("{{wrongly_answered_questions_str}}", wrongly_answered_questions_str)
 
     return feedback
@@ -158,7 +90,9 @@ async def test_prompt_on_benchmark_async(
     prompt: str,
     dataset: dict,
     num_samples: int,
-    dataset_type: str
+    dataset_type: str,
+    student_model: str,
+    random_questions: bool = True
 ) -> tuple[float, list[str], list[str], float]:
     """
     This function takes in a prompt and the logicQA benchmark
@@ -170,10 +104,14 @@ async def test_prompt_on_benchmark_async(
     wrong_answered_questions = []
     invalid_answer_count = 0
 
-    len_benchmark = len(dataset)
-    random_indices = np.random.choice(len_benchmark, num_samples, replace=False)
+    if random_questions:
+        len_benchmark = len(dataset)
+        random_indices = np.random.choice(len_benchmark, num_samples, replace=False)
+    else:
+        random_indices = list(range(num_samples))
 
     async def process_question(index):
+
         qa_dict = dataset[int(index)]
 
         # other steps should be the same regardless of dataset type
@@ -189,23 +127,46 @@ async def test_prompt_on_benchmark_async(
 
         full_prompt = prompt + "\n\n" + Q
 
-        async with AsyncOpenAI() as client:
-            LLM_response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "user", "content": full_prompt}
-                ],
-                temperature=1,
-                max_tokens=512,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0
-            )
+        full_LLM_response_raw = await client.chat.completions.create(
+            model=student_model,
+            messages=[
+                {"role": "user", "content": full_prompt}
+            ],
+            temperature=1,
+            max_tokens=800,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+        full_LLM_response = full_LLM_response_raw.choices[0].message.content
 
-        full_LLM_response = LLM_response.choices[0].message.content
-        LLM_A_int = full_LLM_response[-1]  # this is actually a string of an int
+        # TODO: add a bit that gets gpt40mini to pick out the right answer because fuck formatting tbh
+        # should just be able to replace LLM_A_int and not
+        # LLM_A_int = full_LLM_response[-1]  # this is actually a string of an int
+
+        LLM_A_extractor_prompt = f"""Your job is to extract the numerical final answer from the below answer to a question on a test.
+Ignore all the reasoning and simply respond with a single character that corresponds to the answer. Your response should contain a single character ONLY.
+Therefore your response should be one of ['0','1','2','3'], unless there is no final answer given in which case your response should be "None"
+
+Answer:
+{full_LLM_response}"""
+
+        LLM_A_int_raw = await client.chat.completions.create(
+            model='gpt-4o-mini', # smallest cheapest model just for picking out right answer
+            messages=[
+                {"role": "user", "content": LLM_A_extractor_prompt}
+            ],
+            temperature=0,
+            max_tokens=1,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+
+        LLM_A_int = LLM_A_int_raw.choices[0].message.content
 
         assert type(LLM_A_int) == type(A), f"Answer type mismatch, LLM: {type(LLM_A_int)}, Benchmark: {type(A)}"
+        assert LLM_A_int in ['0', '1', '2', '3'], f"Invalid answer:\n {LLM_A_int}\n\n for question {full_prompt}\n\n and input answer:\n\n {full_LLM_response}"
 
         Q_and_LLM_A = 'QUESTION:\n' + Q + "\n\nLLM ANSWER:\n" + full_LLM_response + "\n\nCORRECT ANSWER:\n" + A + "\n"
 

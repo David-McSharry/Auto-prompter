@@ -5,3 +5,5 @@ venv
 /frontend/.pnp
 /frontend/.pnp.js
 node_modules
+__pycache__
+runs
